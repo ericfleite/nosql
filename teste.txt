@@ -1,0 +1,87 @@
+Criação do docker network:
+docker network create mongoCluster
+
+Iniciando as instâncias (nós):
+docker run -d --rm -p 27017:27017 --name mongo10 --network mongoCluster mongodb/mongodb-community-server:latest --replSet myReplicaSet --bind_ip localhost,mongo10
+
+docker run -d --rm -p 27018:27017 --name mongo20 --network mongoCluster mongodb/mongodb-community-server:latest --replSet myReplicaSet --bind_ip localhost,mongo20
+
+docker run -d --rm -p 27019:27017 --name mongo30 --network mongoCluster mongodb/mongodb-community-server:latest --replSet myReplicaSet --bind_ip localhost,mongo30
+
+docker run -d --rm -p 27020:27017 --name mongo40 --network mongoCluster mongodb/mongodb-community-server:latest --replSet myReplicaSet --bind_ip localhost,mongo40
+
+Criação do conjunto de réplica:
+Usando a interface do docker para criação.
+
+docker exec -it mongo10 mongosh
+
+Salvar o endereço do Connection To:
+No meu caso:
+mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+2.4.2
+
+Verifica se o container está conectado e executando:
+db.runCommand ({hello:1})
+
+Configura os membros do conjunto de réplicas e ativa o conjunto:
+rs.initiate ({ _id: "myReplicaSet", members:[{_id:0, host: "mongo10"}, {_id:1, host: "mongo20"}, {_id:3, host: "mongo30"}, {_id:4, host: "mongo40"}]})
+
+Sair do container shell:
+exit
+
+Verifica o status (é possivel verificar o status e ver quem está como o primário):
+docker exec -it mongo10 mongosh --eval "rs.status()"
+
+No mongoDBcompass, adicione uma conexão com o endereço anteriormente salvo.
+Ao abrir o terminal, verifique se está iniciado o replySet, no meu caso o nome do replicaSet é myReplicaSet, portando deve estar:
+
+myReplicaSet [direct: primary] test>
+
+
+Verifica em que nó você está conectado:
+rs.isMaster().primary
+
+Comando para iserção de dados e leitura dos dados:
+
+use CorporeSystem
+
+db.cliente.insertOne({codigo:1, nome: "Ana Maria"});
+
+db.cliente.insertOne({codigo:2, nome: "Maria Jose"});
+
+db.cliente.insertOne({codigo:3, nome: "Jose Silva"});
+
+db.cliente.insertOne({codigo:4, nome: "Luis Souza"});
+
+db.cliente.insertOne({codigo:5, nome: "Fernanda Silva"});
+
+db.cliente.find()
+
+No docker, para parar um nó, no meu caso o primário:
+docker stop mongo10
+
+
+Para verificar o cluster e também você descobre qual nó virou o primary
+docker exec -it mongo20 mongosh --eval "rs.status()"
+
+No mongoDBcompass
+db.cliente.insertOne({codigo:6, nome: "Teresa Maria"});
+Após a tentativa de inserção de dados, haverá um erro, pois o primário mudou para outro nó.
+
+Faça uma nova conexão:
+
+Porque o primary foi para o mongo30: (apenas mudei 27017 para 27019 que é do novo primário)
+mongodb://127.0.0.1:27019/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+2.4.2
+
+Faça nova leitura e inserção de dados:
+use CorporeSystem
+
+db.cliente.findOne()
+
+db.cliente.insertOne({codigo:7, nome: "Joao Cardoso"});
+
+
+Restabelecendo o nó do cluster no docker
+docker run -d --rm -p 27017:27017 --name mongo10 --network mongoCluster mongodb/mongodb-community-server:latest --replSet myReplicaSet --bind_ip localhost,mongo10
+
+Verifica a volta do nó:
+docker exec -it mongo20 mongosh --eval "rs.status()"
